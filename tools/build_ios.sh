@@ -17,7 +17,10 @@ SIGNING_NAME="Apple Development: Ozan YILDIZ (8F768A29F9)"
 fail() { echo "build_ios: $*" >&2; exit 1; }
 
 if [ -z "${CODESIGN_IDENTITY:-}" ]; then
-	CODESIGN_IDENTITY="$(security find-identity -v -p codesigning | grep -F "\"$SIGNING_NAME\"" | awk 'NR == 1 { print $2 }')"
+	identities="$(security find-identity -v -p codesigning)" || fail "security find-identity failed"
+	# awk, not grep: a pipeline stage that fails on no match would end the
+	# script under pipefail before the message below is printed.
+	CODESIGN_IDENTITY="$(printf '%s\n' "$identities" | awk -v name="\"$SIGNING_NAME\"" 'index($0, name) && !found { print $2; found = 1 }')"
 	[ -n "$CODESIGN_IDENTITY" ] || fail "no valid \"$SIGNING_NAME\" signing identity (set CODESIGN_IDENTITY)"
 fi
 echo "build_ios: signing with $CODESIGN_IDENTITY"

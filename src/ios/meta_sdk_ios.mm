@@ -26,6 +26,11 @@ static NSString *to_ns_string(const String &p_string) {
 	return result != nil ? result : @"";
 }
 
+static bool info_plist_has_string(NSString *p_key) {
+	id value = [NSBundle.mainBundle objectForInfoDictionaryKey:p_key];
+	return [value isKindOfClass:NSString.class] && ((NSString *)value).length > 0;
+}
+
 void MetaSDKIOS::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("log_event", "name", "params"), &MetaSDKIOS::log_event);
 }
@@ -34,10 +39,15 @@ void MetaSDKIOS::start() {
 	if (started) {
 		return;
 	}
-	// Meta's SDK can crash the app when it starts without an App ID.
-	id app_id = [NSBundle.mainBundle objectForInfoDictionaryKey:@"FacebookAppID"];
-	if (![app_id isKindOfClass:NSString.class] || ((NSString *)app_id).length == 0) {
+	// Meta's SDK can crash the app when it starts without an App ID or a client
+	// token (FBSDKCoreKit raises InvalidOperationException for the latter), so
+	// check both before any FBSDK call.
+	if (!info_plist_has_string(@"FacebookAppID")) {
 		ERR_PRINT("MetaSDK: FacebookAppID is missing from Info.plist; Meta SDK not started.");
+		return;
+	}
+	if (!info_plist_has_string(@"FacebookClientToken")) {
+		ERR_PRINT("MetaSDK: FacebookClientToken is missing from Info.plist; Meta SDK not started.");
 		return;
 	}
 
