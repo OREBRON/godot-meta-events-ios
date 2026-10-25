@@ -6,7 +6,12 @@
 #
 # Signing uses the SHA-1 of the first valid "Apple Development: Ozan YILDIZ
 # (8F768A29F9)" identity (two identities share that name on the dev Mac);
-# set CODESIGN_IDENTITY to override.
+# set CODESIGN_IDENTITY to override. Every signature carries a secure timestamp
+# from Apple's timestamp server, so it stays valid after that development
+# certificate expires; the build fails when the server cannot be reached.
+#
+# The frameworks' CFBundleShortVersionString is the addon version from
+# addons/meta_sdk/plugin.cfg.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -15,6 +20,12 @@ MIN_IOS="15.0"
 SIGNING_NAME="Apple Development: Ozan YILDIZ (8F768A29F9)"
 
 fail() { echo "build_ios: $*" >&2; exit 1; }
+
+VERSION="$(sed -n 's/^version="\([^"]*\)".*/\1/p' addons/meta_sdk/plugin.cfg)"
+# Apple requires one to three dot-separated integers here.
+[[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] \
+	|| fail "addons/meta_sdk/plugin.cfg version \"$VERSION\" is not a version like 1.0.0"
+echo "build_ios: version $VERSION"
 
 if [ -z "${CODESIGN_IDENTITY:-}" ]; then
 	identities="$(security find-identity -v -p codesigning)" || fail "security find-identity failed"
@@ -59,7 +70,7 @@ write_info_plist() {
 	<key>CFBundlePackageType</key>
 	<string>FMWK</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>$VERSION</string>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>$bundle_platform</string>
@@ -74,6 +85,18 @@ write_info_plist() {
 </plist>
 PLIST
 	plutil -lint -s "$plist" || fail "invalid $plist"
+}
+
+# Signs with a secure timestamp (--timestamp, Apple's timestamp server) and
+# checks that the signature carries it. Without one the signature stops
+# verifying once the signing certificate expires.
+sign() {
+	local path="$1"
+	codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$path" \
+		|| fail "codesign failed for $path (a secure timestamp needs Apple's timestamp server, timestamp.apple.com; check the network and retry)"
+	local info
+	info="$(codesign -dvv "$path" 2>&1)" || fail "codesign -dvv failed for $path"
+	grep -q '^Timestamp=' <<< "$info" || fail "$path was signed without a secure timestamp"
 }
 
 for target in template_debug template_release; do
@@ -95,14 +118,14 @@ for target in template_debug template_release; do
 		mkdir -p "$framework"
 		cp "$out/$name" "$framework/$name"
 		write_info_plist "$framework/Info.plist" "$name" "$target" "$bundle_platform" "$dt_platform"
-		codesign --force --timestamp=none --sign "$CODESIGN_IDENTITY" "$framework"
+		sign "$framework"
 		frameworks+=(-framework "$framework")
 	done
 
 	xcframework="$BIN/$name.xcframework"
 	rm -rf "$xcframework"
 	xcodebuild -create-xcframework "${frameworks[@]}" -output "$xcframework"
-	codesign --force --timestamp=none --sign "$CODESIGN_IDENTITY" "$xcframework"
+	sign "$xcframework"
 	codesign --verify --strict "$xcframework" || fail "$xcframework failed codesign --verify --strict"
 	echo "build_ios: $xcframework ok"
 done
