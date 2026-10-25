@@ -27,12 +27,22 @@ the app.
    ```
 
    Commit the files with git, which stores symlinks. If the game keeps large
-   binaries in Git LFS, add rules for the xcframework binaries without a file
-   extension (`meta_sdk.ios.template_*`, `FBSDKCoreKit`, `FBSDKCoreKit_Basics`,
-   `FBAEMKit` under `addons/meta_sdk/bin/ios/`).
+   binaries in Git LFS, put the whole `bin/ios` folder in LFS with this single
+   `.gitattributes` rule:
+
+   ```gitattributes
+   addons/meta_sdk/bin/ios/** filter=lfs diff=lfs merge=lfs -text
+   ```
+
+   Rules for the binaries alone (`meta_sdk.ios.template_*`, `FBSDKCoreKit`,
+   `FBSDKCoreKit_Basics`, `FBAEMKit`) are not enough: Meta's xcframeworks also hold
+   Swift `*.abi.json` files and dSYM `Relocations/*.yml` files, about 40 MB of text
+   that would then go into plain Git history with every addon version. LFS
+   leaves the symlinks as Git symlinks, so the signatures still verify after a clone.
 2. Project > Project Settings > Plugins: enable **Meta SDK**.
-3. Fill in the three settings (Project Settings, section `meta_sdk`, or edit
-   `project.godot` directly):
+3. Fill in the three settings (Project Settings > General, section **Meta Sdk**,
+   or edit `project.godot` directly). The plugin registers them as basic settings,
+   so they show without the **Advanced Settings** toggle once it is enabled:
 
    ```ini
    [meta_sdk]
@@ -76,9 +86,27 @@ What the export does, and what it does when something is missing:
   with "Export all resources" would pack the 26 Swift `*.abi.json` files inside
   Meta's xcframeworks (about 53 MB). iOS exports still embed the xcframeworks,
   because `meta_sdk.gdextension` names them by path. Keep the file when you copy
-  or commit the addon.
+  or commit the addon; the editor warns at startup when it is missing.
+- An Xcode project export also gets a `.gdignore` in
+  `<Name>/dylibs/addons/meta_sdk/bin/ios/`, next to the restored Meta copies. When
+  the export folder is inside the project (such as `build/ios/`), this keeps the
+  next export from packing those copies' `*.abi.json` files.
 - A PCK/ZIP export of the iOS preset (`--export-pack`) writes no Xcode project,
   so the framework repair is skipped and prints nothing.
+
+## Upgrade
+
+Delete the old addon before unzipping the new release, then check the install:
+
+```sh
+rm -rf addons/meta_sdk
+unzip -q godot-meta-sdk-<version>.zip -d .
+codesign --verify --strict addons/meta_sdk/bin/ios/FBSDKCoreKit.xcframework
+```
+
+Unzipping over an old copy keeps every file the new release no longer has. A
+leftover file inside one of Meta's xcframeworks breaks its signature, and Xcode
+then refuses to build.
 
 ## API
 
@@ -90,9 +118,10 @@ MetaSDK.log_event("level_cleared", {"level": 3, "time": 41.5, "perfect": true, "
 `MetaSDK.log_event(name: String, params: Dictionary = {})`
 
 - Parameter keys must be `String` or `StringName`. Values must be `String`,
-  `StringName`, `int`, `float` or `bool`. A pair with any other key or value
-  (`null`, `Array`, `Dictionary`, `Vector2`, ...) is dropped with a warning and the
-  event is still sent with the remaining pairs.
+  `StringName`, `int`, a finite `float` or `bool`. A pair with any other key or
+  value (`null`, `Array`, `Dictionary`, `Vector2`, `NAN`, `INF`, ...) is dropped
+  with a warning and the event is still sent with the remaining pairs. The check
+  runs on every platform, so a desktop run prints the same warnings as iOS.
 - An empty name is ignored with a warning.
 - Event name length, the number of parameters and the like are checked by Meta's
   SDK, not here.
@@ -105,6 +134,18 @@ MetaSDK.log_event("level_cleared", {"level": 3, "time": 41.5, "perfect": true, "
 
 The SDK starts at app launch and logs installs and app activation on its own
 (`fb_mobile_activate_app`); it batches events and sends them in the background.
+
+## App Store privacy
+
+Meta's frameworks bring their own privacy manifests (`PrivacyInfo.xcprivacy`),
+which Xcode merges into the app's privacy report. FBSDKCoreKit 18.1.1 declares
+`NSPrivacyTracking = true` with the tracking domain `ep1.facebook.com`, and lists
+the Device ID as collected, linked to the user and used for tracking (third-party
+advertising, analytics, app functionality). Every game that adds this addon must
+revisit its App Privacy answers in App Store Connect and its privacy policy to
+match. Apple blocks requests to a declared tracking domain until the player allows
+tracking through App Tracking Transparency, which this addon never asks for (see
+below).
 
 ## What it does not do
 
@@ -133,18 +174,21 @@ Only the maintainer of the addon needs these; games use the release zip.
 - A signing identity. `tools/build_ios.sh` signs the iOS libraries with the first
   valid `Apple Development: Ozan YILDIZ (8F768A29F9)` identity from
   `security find-identity -v -p codesigning`; set `CODESIGN_IDENTITY` (a SHA-1 or
-  name) to use another.
-- Network access the first time, to download Meta's frameworks. SCons 4.9.1 is
-  installed into a repo-local `.venv` automatically.
+  name) to use another. Each signature carries a secure timestamp, so it stays
+  valid after that certificate expires.
+- Network access: the first build downloads Meta's frameworks, and every build
+  asks Apple's timestamp server for the signature timestamps (the build fails when
+  it cannot reach it). SCons 4.9.1 is installed into a repo-local `.venv`
+  automatically.
 
 Tools:
 
 | Command | What it does |
 |---|---|
 | `tools/build_stubs.sh` | Builds the no-op libraries for macOS, Windows, Linux and Android and checks each exports `meta_sdk_library_init`. |
-| `tools/build_ios.sh` | Fetches Meta SDK 18.1.1 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs `meta_sdk.ios.template_{debug,release}.xcframework`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/` and writes that folder's `.gdignore`. A cold build takes several minutes. |
+| `tools/build_ios.sh` | Fetches Meta SDK 18.1.1 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs (with a secure timestamp) `meta_sdk.ios.template_{debug,release}.xcframework` with the `plugin.cfg` version as `CFBundleShortVersionString`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/` and writes that folder's `.gdignore`. A cold build takes several minutes. |
 | `tools/run_tests.sh` | Runs the headless GDScript tests in `tests/`. |
-| `tools/run_simulator_demo.sh` | Exports `demo/`, builds it for the iOS Simulator, runs it for 20 s and keeps the logs in `build/ios/`. |
+| `tools/run_simulator_demo.sh` | Exports `demo/`, builds it for the iOS Simulator, runs it for 20 s, keeps the logs in `build/ios/` and fails unless the console shows `MetaSDK: started` and `MetaSDK: logged meta_sdk_demo`. |
 
 The Simulator demo needs workarounds that apply only to that script, not to games:
 Godot 4.7.2's official iOS template ships an x86_64-only Simulator `libgodot.a`
@@ -157,7 +201,9 @@ never sends events for a real app.
 ## Release
 
 1. Set `version` in `addons/meta_sdk/plugin.cfg` (and update its description if the
-   bundled Meta SDK version changed).
+   bundled Meta SDK version changed). It must be one to three dot-separated
+   integers, such as `1.0.1`: `tools/build_ios.sh` writes it into the iOS
+   frameworks' `CFBundleShortVersionString`.
 2. Run `tools/release.sh`. It reads the version, runs `tools/build_stubs.sh` and
    `tools/build_ios.sh`, imports the project, runs `tools/run_tests.sh`, copies
    `addons/meta_sdk` (without `.DS_Store`) and zips it with `zip -y`, which keeps
@@ -197,8 +243,11 @@ addons/meta_sdk/
    xcframeworks stay unmodified and unsliced.
 2. A new major version can change the API that `src/ios/meta_sdk_ios.mm` calls;
    read Meta's release notes and fix the build.
-3. Run `tools/build_ios.sh`, then `tools/run_simulator_demo.sh` and check that
+3. Delete `build/ios` (`rm -rf build/ios`). It holds the SCons objects, and SCons
+   does not track Meta's headers or binaries, so without this the build would keep
+   objects compiled against the old SDK.
+4. Run `tools/build_ios.sh`, then `tools/run_simulator_demo.sh`, which checks that
    `build/ios/console.log` contains `MetaSDK: started` and
    `MetaSDK: logged meta_sdk_demo`.
-4. Bump `version` (and the SDK version in the `plugin.cfg` description and this
+5. Bump `version` (and the SDK version in the `plugin.cfg` description and this
    README) and run `tools/release.sh`.
