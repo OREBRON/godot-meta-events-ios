@@ -71,6 +71,12 @@ What the export does, and what it does when something is missing:
   nothing. It never crashes.
 - Debug builds print `MetaSDK: started` and `MetaSDK: logged <name>` for each
   event; release builds print nothing for normal operation.
+- `addons/meta_sdk/bin/ios/` holds a `.gdignore`, so Godot neither imports that
+  folder nor packs it into game data on any platform. Without it, every export
+  with "Export all resources" would pack the 26 Swift `*.abi.json` files inside
+  Meta's xcframeworks (about 53 MB). iOS exports still embed the xcframeworks,
+  because `meta_sdk.gdextension` names them by path. Keep the file when you copy
+  or commit the addon.
 
 ## API
 
@@ -134,7 +140,7 @@ Tools:
 | Command | What it does |
 |---|---|
 | `tools/build_stubs.sh` | Builds the no-op libraries for macOS, Windows, Linux and Android and checks each exports `meta_sdk_library_init`. |
-| `tools/build_ios.sh` | Fetches Meta SDK 18.1.1 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs `meta_sdk.ios.template_{debug,release}.xcframework`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/`. A cold build takes several minutes. |
+| `tools/build_ios.sh` | Fetches Meta SDK 18.1.1 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs `meta_sdk.ios.template_{debug,release}.xcframework`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/` and writes that folder's `.gdignore`. A cold build takes several minutes. |
 | `tools/run_tests.sh` | Runs the headless GDScript tests in `tests/`. |
 | `tools/run_simulator_demo.sh` | Exports `demo/`, builds it for the iOS Simulator, runs it for 20 s and keeps the logs in `build/ios/`. |
 
@@ -156,9 +162,9 @@ never sends events for a real app.
    the xcframework symlinks.
 3. The script then fails unless the zip lists every file a game needs (the plugin
    files, the `export/` scripts, their `.uid` files, the `Info.plist` of all five
-   xcframeworks and all six stub libraries), nothing from `.godot/`, `vendor/` or
-   `build/`, the same number of symlinks as the source, and unzipped xcframeworks
-   that pass `codesign --verify --strict`.
+   xcframeworks, `bin/ios/.gdignore` and all six stub libraries), nothing from
+   `.godot/`, `vendor/` or `build/`, the same number of symlinks as the source,
+   and unzipped xcframeworks that pass `codesign --verify --strict`.
 4. The result is `dist/godot-meta-sdk-<version>.zip`. `dist/` is not committed.
    Meta's three xcframeworks must stay unmodified, so the zip is large (about 135
    MB of Meta frameworks, mostly Mac Catalyst slices and debug symbols).
@@ -168,6 +174,7 @@ The zip's root is `addons/meta_sdk/`:
 ```
 addons/meta_sdk/
   plugin.cfg  plugin.gd  meta_sdk.gd  meta_sdk.gdextension  export/
+  bin/ios/.gdignore                         # keeps bin/ios out of exported game data
   bin/ios/meta_sdk.ios.template_debug.xcframework
   bin/ios/meta_sdk.ios.template_release.xcframework
   bin/ios/FBSDKCoreKit.xcframework          # Meta's own, signed, unmodified

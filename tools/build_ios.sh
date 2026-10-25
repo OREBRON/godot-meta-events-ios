@@ -32,6 +32,14 @@ fi
 
 tools/fetch_meta_sdk.sh
 
+# Keep bin/ios out of Godot's filesystem. Meta's xcframeworks hold 26 Swift
+# *.abi.json files (about 53 MB); Godot treats .json as a resource, so every
+# "all_resources" export (iOS, Android, PCK) would otherwise pack them into the
+# game's data. Godot still embeds the xcframeworks through meta_sdk.gdextension,
+# which names them by path. The file sits next to the xcframeworks, never inside
+# Meta's, whose code signature seals their contents.
+printf '%s\n' "# Godot skips this folder, so exports never pack Meta's *.abi.json files; iOS exports still embed the xcframeworks listed in meta_sdk.gdextension." > "$BIN/.gdignore"
+
 # Writes the framework Info.plist (same keys as the Firebase iOS frameworks).
 write_info_plist() {
 	local plist="$1" name="$2" target="$3" bundle_platform="$4" dt_platform="$5"

@@ -76,6 +76,8 @@ XCFRAMEWORKS=(meta_sdk.ios.template_debug meta_sdk.ios.template_release FBSDKCor
 for name in "${XCFRAMEWORKS[@]}"; do
 	require "bin/ios/$name.xcframework/Info.plist"
 done
+# Without it every game export packs Meta's 53 MB of *.abi.json (tools/build_ios.sh).
+require "bin/ios/.gdignore"
 
 for file in macos/libmeta_sdk_stub.macos.dylib windows/meta_sdk_stub.windows.x86_64.dll \
 	linux/libmeta_sdk_stub.linux.x86_64.so android/libmeta_sdk_stub.android.arm64.so \
