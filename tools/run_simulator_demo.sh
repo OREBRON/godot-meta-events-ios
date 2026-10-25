@@ -5,7 +5,8 @@
 #   tools/run_simulator_demo.sh [out_dir]      (default: build/ios)
 # Writes <out>/export.log, <out>/xcodebuild.log and <out>/console.log (the
 # app's console followed by its unified log lines), and exits 1 when the app
-# was no longer running after 20 s.
+# was no longer running after 20 s or console.log lacks "MetaSDK: started" or
+# "MetaSDK: logged meta_sdk_demo".
 # Needs the iOS binaries from tools/build_ios.sh in addons/meta_sdk/bin/ios.
 set -euo pipefail
 
@@ -116,3 +117,7 @@ echo "run_simulator_demo: launchctl: ${job:-<no job>}"
 echo "run_simulator_demo: app running after ${RUN_SECONDS} s: $running"
 echo "run_simulator_demo: console log $OUT/console.log"
 [ "$running" = "yes" ] || fail "the app was not running after ${RUN_SECONDS} s"
+for expected in "MetaSDK: started" "MetaSDK: logged meta_sdk_demo"; do
+	grep -qF "$expected" "$OUT/console.log" || fail "\"$expected\" is missing from $OUT/console.log"
+done
+echo "run_simulator_demo: console has \"MetaSDK: started\" and \"MetaSDK: logged meta_sdk_demo\""

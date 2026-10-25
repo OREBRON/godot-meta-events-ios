@@ -1,7 +1,10 @@
 .godot/
 .venv/
 vendor/
-build/
+# build/.gdignore is tracked so Godot never scans build output: release.sh's
+# staged addon copy would otherwise register a second class_name MetaSDK.
+build/*
+!build/.gdignore
 dist/
 addons/meta_sdk/bin/
 .DS_Store

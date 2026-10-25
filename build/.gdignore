@@ -1,0 +1,1 @@
+# Godot skips build output (SCons objects, release staging, Simulator demo exports).

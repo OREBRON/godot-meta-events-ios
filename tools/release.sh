@@ -32,6 +32,9 @@ echo "release: version $VERSION"
 # A failure anywhere below must not leave an earlier release (or a rejected
 # candidate) looking current.
 rm -f "$RELEASE_ZIP" "$ZIP"
+# A staged copy left in the project (build/release/stage/addons/meta_sdk) would
+# be a second class_name MetaSDK if build/.gdignore were missing.
+rm -rf "$STAGE" "$VERIFY"
 
 tools/build_stubs.sh
 tools/build_ios.sh
@@ -116,7 +119,7 @@ for name in "${XCFRAMEWORKS[@]}"; do
 	codesign --verify --strict "$VERIFY/$ADDON/bin/ios/$name.xcframework" \
 		|| fail "$name.xcframework fails codesign --verify --strict after unzipping $ZIP"
 done
-rm -rf "$VERIFY"
+rm -rf "$VERIFY" "$STAGE"
 
 # Everything passed: publish. Same filesystem, so the move is atomic.
 mkdir -p "$ROOT/dist"
