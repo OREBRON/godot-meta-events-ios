@@ -9,6 +9,10 @@
 # the script lists the archive and fails unless every file a game needs is in
 # it, nothing from .godot/, vendor/ or build/ is, the symlinks survived and the
 # xcframeworks still pass `codesign --verify --strict` when unzipped.
+#
+# dist/ only ever holds a zip that passed those checks: the old release zip is
+# removed before anything is built, the new one is written to build/release/ and
+# moved into dist/ as the last step.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -21,8 +25,13 @@ fail() { echo "release: $*" >&2; exit 1; }
 
 VERSION="$(sed -n 's/^version="\([^"]*\)".*/\1/p' "$ADDON/plugin.cfg")"
 [ -n "$VERSION" ] || fail "no version=\"...\" line in $ADDON/plugin.cfg"
-ZIP="$ROOT/dist/godot-meta-sdk-$VERSION.zip"
+RELEASE_ZIP="$ROOT/dist/godot-meta-sdk-$VERSION.zip"
+ZIP="$ROOT/build/release/godot-meta-sdk-$VERSION.zip"
 echo "release: version $VERSION"
+
+# A failure anywhere below must not leave an earlier release (or a rejected
+# candidate) looking current.
+rm -f "$RELEASE_ZIP" "$ZIP"
 
 tools/build_stubs.sh
 tools/build_ios.sh
@@ -33,10 +42,9 @@ tools/run_tests.sh
 
 # Stage a copy without Finder junk; rsync -a keeps symlinks.
 rm -rf "$STAGE" "$VERIFY"
-mkdir -p "$STAGE/$ADDON" dist
+mkdir -p "$STAGE/$ADDON"
 rsync -a --exclude .DS_Store "$ADDON/" "$STAGE/$ADDON/"
 
-rm -f "$ZIP"
 (cd "$STAGE" && zip -qry "$ZIP" addons)
 [ -f "$ZIP" ] || fail "zip did not write $ZIP"
 
@@ -108,5 +116,9 @@ for name in "${XCFRAMEWORKS[@]}"; do
 done
 rm -rf "$VERIFY"
 
+# Everything passed: publish. Same filesystem, so the move is atomic.
+mkdir -p "$ROOT/dist"
+mv "$ZIP" "$RELEASE_ZIP"
+
 echo "release: content check ok ($(wc -l <<< "$entries" | tr -d ' ') entries, $zipped_links symlinks)"
-echo "release: $ZIP ($(du -h "$ZIP" | awk '{ print $1 }'))"
+echo "release: $RELEASE_ZIP ($(du -h "$RELEASE_ZIP" | awk '{ print $1 }'))"
