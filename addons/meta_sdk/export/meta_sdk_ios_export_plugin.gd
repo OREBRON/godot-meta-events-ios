@@ -8,8 +8,8 @@ extends EditorExportPlugin
 const Plist = preload("meta_sdk_ios_plist.gd")
 const Frameworks = preload("meta_sdk_ios_frameworks.gd")
 
-## Where this iOS export's Meta frameworks land; empty for other exports.
-var _exported_frameworks_dir := ""
+## The path of the iOS export in progress; empty for other exports.
+var _ios_export_path := ""
 
 
 func _get_name() -> String:
@@ -38,10 +38,10 @@ func _get_export_option_warning(_platform: EditorExportPlatform, option: String)
 ## Without a valid App ID the Info.plist gets no Meta keys. The native side then
 ## skips SDK start-up, so the app still runs; it only measures nothing.
 func _export_begin(features: PackedStringArray, _is_debug: bool, path: String, _flags: int) -> void:
-	_exported_frameworks_dir = ""
+	_ios_export_path = ""
 	if not features.has("ios"):
 		return
-	_exported_frameworks_dir = Frameworks.exported_dir(path)
+	_ios_export_path = path
 	var add_skadnetwork: bool = get_option(Plist.SKADNETWORK_OPTION)
 	var result := _build_plist(add_skadnetwork)
 	if result.error != OK:
@@ -52,13 +52,14 @@ func _export_begin(features: PackedStringArray, _is_debug: bool, path: String, _
 
 ## Godot calls this once the Xcode project is written. A one-click export
 ## (application/export_project_only off) runs xcodebuild before that, so only
-## project-only exports reach Xcode with the exact frameworks.
+## project-only exports reach Xcode with the exact frameworks. A PCK/ZIP export
+## (--export-pack) writes no Xcode project, so restore_export does nothing then.
 func _export_end() -> void:
-	if _exported_frameworks_dir.is_empty():
+	if _ios_export_path.is_empty():
 		return
-	for message in Frameworks.restore(_exported_frameworks_dir):
+	for message in Frameworks.restore_export(_ios_export_path):
 		push_error("Meta SDK iOS export error: " + message)
-	_exported_frameworks_dir = ""
+	_ios_export_path = ""
 
 
 func _build_plist(add_skadnetwork: bool) -> Dictionary:

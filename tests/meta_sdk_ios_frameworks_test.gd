@@ -77,6 +77,33 @@ func run() -> void:
 	errors = Frameworks.restore(exported, source)
 	check(errors.size() == 1 and errors[0].contains("FBAEMKit.xcframework"), "A framework Godot did not export is reported: %s" % ", ".join(errors))
 
+	check(Frameworks.project_file("build/ios/MetaSDKDemo.xcodeproj") == project.path_join("build/ios/MetaSDKDemo.xcodeproj/project.pbxproj"), "Relative export paths name the project file inside the project")
+	check(Frameworks.project_file("/Users/dev/out/Color Sprint.zip") == "/Users/dev/out/Color Sprint.xcodeproj/project.pbxproj", "Any export path names the Xcode project next to it")
+
+	# --export-pack runs the same plugins but writes only a PCK/ZIP: no project, no frameworks.
+	var pack_export := root.path_join("pack/Game.zip")
+	errors = Frameworks.restore_export(pack_export, source)
+	check(errors.is_empty(), "An export without an Xcode project reports nothing: %s" % ", ".join(errors))
+	var stray_copy := root.path_join("pack/Game/dylibs/addons/meta_sdk/bin/ios")
+	for name in Frameworks.NAMES:
+		make_godot_copy(stray_copy.path_join(name + ".xcframework"))
+	errors = Frameworks.restore_export(pack_export, source)
+	check(errors.is_empty(), "An export without an Xcode project still reports nothing: %s" % ", ".join(errors))
+	check(link_target(stray_copy.path_join("FBSDKCoreKit.xcframework/maccatalyst/Kit.framework/Versions/Current")) == "<not a link>", "An export without an Xcode project leaves files alone")
+
+	var project_export := root.path_join("project/Game.xcodeproj")
+	write_file(project_export.path_join("project.pbxproj"), "pbxproj")
+	var project_copy := Frameworks.exported_dir(project_export)
+	for name in Frameworks.NAMES:
+		make_godot_copy(project_copy.path_join(name + ".xcframework"))
+	errors = Frameworks.restore_export(project_export, source)
+	check(errors.is_empty(), "An Xcode project export restores without errors: %s" % ", ".join(errors))
+	for name in Frameworks.NAMES:
+		check(link_target(project_copy.path_join(name + ".xcframework/maccatalyst/Kit.framework/Versions/Current")) == "A", "%s: an Xcode project export gets the exact copy" % name)
+	Frameworks.remove_tree(project_copy.path_join("FBAEMKit.xcframework"))
+	errors = Frameworks.restore_export(project_export, source)
+	check(errors.size() == 1 and errors[0].contains("FBAEMKit.xcframework"), "An Xcode project export still reports a missing framework: %s" % ", ".join(errors))
+
 	check(Frameworks.remove_tree(root) == OK and not DirAccess.dir_exists_absolute(root), "remove_tree deletes a tree with symlinks")
 	if failures == 0:
 		print("PASS")

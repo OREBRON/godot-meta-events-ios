@@ -77,6 +77,8 @@ What the export does, and what it does when something is missing:
   Meta's xcframeworks (about 53 MB). iOS exports still embed the xcframeworks,
   because `meta_sdk.gdextension` names them by path. Keep the file when you copy
   or commit the addon.
+- A PCK/ZIP export of the iOS preset (`--export-pack`) writes no Xcode project,
+  so the framework repair is skipped and prints nothing.
 
 ## API
 

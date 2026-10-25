@@ -16,11 +16,23 @@ const NAMES: Array[String] = ["FBSDKCoreKit", "FBSDKCoreKit_Basics", "FBAEMKit"]
 ## export_path (".../<Name>.xcodeproj"). Relative paths are project-relative,
 ## as Godot treats them.
 static func exported_dir(export_path: String) -> String:
-	if export_path.is_relative_path():
-		export_path = "res://" + export_path
-	export_path = ProjectSettings.globalize_path(export_path)
-	var binary_name := export_path.get_file().get_basename()
-	return export_path.get_base_dir().path_join(binary_name).path_join("dylibs").path_join(SOURCE_DIR.trim_prefix("res://"))
+	return _export_base(export_path).path_join("dylibs").path_join(SOURCE_DIR.trim_prefix("res://"))
+
+
+## The project.pbxproj an iOS export to export_path writes (".../<Name>.xcodeproj/
+## project.pbxproj"), whether or not it exists.
+static func project_file(export_path: String) -> String:
+	return (_export_base(export_path) + ".xcodeproj").path_join("project.pbxproj")
+
+
+## Restores the Meta frameworks of an iOS export to export_path, but only when that
+## export wrote an Xcode project. A PCK/ZIP export (--export-pack) runs the same
+## export plugins yet writes no project and copies no frameworks, so there is
+## nothing to restore and nothing to report. Returns one message per failure.
+static func restore_export(export_path: String, source_dir: String = SOURCE_DIR) -> PackedStringArray:
+	if not FileAccess.file_exists(project_file(export_path)):
+		return PackedStringArray()
+	return restore(exported_dir(export_path), source_dir)
 
 
 ## Replaces Godot's copy of each Meta xcframework in target_dir with an exact copy
@@ -75,6 +87,14 @@ static func remove_tree(path: String) -> Error:
 		else:
 			err = dir.remove(entry)
 	return err if err != OK else DirAccess.remove_absolute(path)
+
+
+## <dir>/<Name> for an export to <dir>/<Name>.<ext>, as an absolute path.
+static func _export_base(export_path: String) -> String:
+	if export_path.is_relative_path():
+		export_path = "res://" + export_path
+	export_path = ProjectSettings.globalize_path(export_path)
+	return export_path.get_base_dir().path_join(export_path.get_file().get_basename())
 
 
 ## Every entry of dir, hidden ones included, listed before anything changes.
