@@ -9,6 +9,26 @@ func check(ok: bool, message: String) -> void:
 		failures += 1
 		printerr("FAIL: ", message)
 
+## Returns the FacebookDisplayName value as a plist reader would see it, or a
+## marker string when the fragment cannot be read.
+func display_name_in(fragment: String) -> String:
+	var parser := XMLParser.new()
+	if parser.open_buffer(("<plist><dict>" + fragment + "</dict></plist>").to_utf8_buffer()) != OK:
+		return "<fragment did not open>"
+	var element := ""
+	var key := ""
+	while parser.read() == OK:
+		match parser.get_node_type():
+			XMLParser.NODE_ELEMENT:
+				element = parser.get_node_name()
+			XMLParser.NODE_TEXT:
+				var text := parser.get_node_data()
+				if element == "key":
+					key = text
+				elif element == "string" and key == "FacebookDisplayName":
+					return text.xml_unescape()
+	return "<FacebookDisplayName not found>"
+
 func _initialize() -> void:
 	call_deferred("run")
 
@@ -22,12 +42,11 @@ func run() -> void:
 	check(Plist.plist("1609617600637476", TOKEN, "Çiçek Koşusu", false).content.contains("<string>Çiçek Koşusu</string>"), "UTF-8 names stay intact")
 	var sk: Dictionary = Plist.plist("1609617600637476", TOKEN, "Color Sprint", true)
 	check(sk.content.count("<key>SKAdNetworkItems</key>") == 1 and sk.content.contains("v9wttpbfk9.skadnetwork") and sk.content.contains("n38lu8286q.skadnetwork"), "Both Meta SKAdNetwork IDs in one array")
-	var parser := XMLParser.new()
-	check(parser.open_buffer(("<plist><dict>" + sk.content + "</dict></plist>").to_utf8_buffer()) == OK, "Fragment opens as XML")
-	var result := parser.read()
-	while result == OK:
-		result = parser.read()
-	check(result == ERR_FILE_EOF, "Fragment is well-formed XML")
+	# XMLParser is non-validating (it accepts unescaped "&" and "<"), so well-formedness
+	# is checked by reading the display name back out and comparing it to the input.
+	for name in ["Tom & Jerry's <Run>", "Çiçek Koşusu"]:
+		var fragment: String = Plist.plist("1609617600637476", TOKEN, name, false).content
+		check(display_name_in(fragment) == name, "Display name round-trips through the plist XML: %s" % name)
 	for bad in [["", TOKEN], ["16096x", TOKEN], ["-1", TOKEN], ["+1", TOKEN], ["1609617600637476", ""], ["1609617600637476", "abc def"], ["1609617600637476", "abc\n"]]:
 		check(Plist.plist(bad[0], bad[1], "x", false).error == ERR_INVALID_DATA, "Rejects %s" % [bad])
 	check(Plist.plist("", TOKEN, "x", false).message == "Set meta_sdk/app_id to the numeric Facebook App ID.", "App ID message")
