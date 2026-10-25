@@ -12,15 +12,17 @@ const NATIVE_SINGLETON := "MetaSDKIOS"
 ## Logs an app event to Meta. Does nothing when the native singleton is missing
 ## (desktop, editor). Parameter pairs Meta cannot take are dropped with a warning
 ## and the event is still sent: keys must be String or StringName, values must be
-## String, StringName, int, float or bool.
+## String, StringName, int, finite float or bool. The parameters are checked on
+## every platform, so desktop runs print the same warnings an iOS build would.
 static func log_event(name: String, params: Dictionary = {}) -> void:
 	if name.is_empty():
 		push_warning("MetaSDK: log_event called with an empty event name; ignored.")
 		return
+	var clean := _sanitize(name, params)
 	if not Engine.has_singleton(NATIVE_SINGLETON):
 		return
 	var native := Engine.get_singleton(NATIVE_SINGLETON)
-	native.log_event(name, _sanitize(name, params))
+	native.log_event(name, clean)
 
 
 static func _sanitize(event_name: String, params: Dictionary) -> Dictionary:
@@ -33,8 +35,14 @@ static func _sanitize(event_name: String, params: Dictionary) -> Dictionary:
 		match typeof(value):
 			TYPE_STRING, TYPE_STRING_NAME:
 				clean[String(key)] = String(value)
-			TYPE_INT, TYPE_FLOAT, TYPE_BOOL:
+			TYPE_INT, TYPE_BOOL:
 				clean[String(key)] = value
+			TYPE_FLOAT:
+				# NaN and infinities have no JSON form; Meta's SDK cannot send them.
+				if is_finite(value):
+					clean[String(key)] = value
+				else:
+					push_warning("MetaSDK: %s: dropped parameter '%s' with non-finite float %s." % [event_name, String(key), str(value)])
 			_:
 				push_warning("MetaSDK: %s: dropped parameter '%s' with unsupported value type %s." % [event_name, String(key), type_string(typeof(value))])
 	return clean
