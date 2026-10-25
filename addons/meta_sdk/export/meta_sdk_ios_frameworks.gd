@@ -10,6 +10,12 @@ extends RefCounted
 
 const SOURCE_DIR := "res://addons/meta_sdk/bin/ios"
 const NAMES: Array[String] = ["FBSDKCoreKit", "FBSDKCoreKit_Basics", "FBAEMKit"]
+## Written beside the restored xcframeworks (restore_export). Without it an
+## export into the project (build/ios/...) puts Meta's 26 *.abi.json files (about
+## 53 MB) back under res://, and the next export with "Export all resources" packs
+## them into the game data. It never goes inside Meta's xcframeworks, whose
+## signatures seal their contents.
+const GDIGNORE_TEXT := "# Written by the Meta SDK export plugin: Godot skips this exported copy of addons/meta_sdk/bin/ios, so a later export never packs Meta's *.abi.json files.\n"
 
 
 ## The folder Godot copies SOURCE_DIR's frameworks to for an iOS export to
@@ -29,10 +35,29 @@ static func project_file(export_path: String) -> String:
 ## export wrote an Xcode project. A PCK/ZIP export (--export-pack) runs the same
 ## export plugins yet writes no project and copies no frameworks, so there is
 ## nothing to restore and nothing to report. Returns one message per failure.
+##
+## The exported folder then gets a .gdignore (GDIGNORE_TEXT), like the addon's own
+## bin/ios, for exports into a folder inside the project such as build/ios.
 static func restore_export(export_path: String, source_dir: String = SOURCE_DIR) -> PackedStringArray:
 	if not FileAccess.file_exists(project_file(export_path)):
 		return PackedStringArray()
-	return restore(exported_dir(export_path), source_dir)
+	var target_dir := exported_dir(export_path)
+	var errors := restore(target_dir, source_dir)
+	if DirAccess.dir_exists_absolute(target_dir):
+		var err := write_gdignore(target_dir)
+		if err != OK:
+			errors.append("could not write %s: %s" % [target_dir.path_join(".gdignore"), error_string(err)])
+	return errors
+
+
+## Writes target_dir/.gdignore (GDIGNORE_TEXT).
+static func write_gdignore(target_dir: String) -> Error:
+	var file := FileAccess.open(target_dir.path_join(".gdignore"), FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_string(GDIGNORE_TEXT)
+	file.close()
+	return OK
 
 
 ## Replaces Godot's copy of each Meta xcframework in target_dir with an exact copy
