@@ -1,0 +1,7 @@
+.godot/
+.venv/
+vendor/
+build/
+dist/
+addons/meta_sdk/bin/
+.DS_Store
