@@ -1,0 +1,18 @@
+[configuration]
+entry_symbol = "meta_sdk_library_init"
+compatibility_minimum = "4.5"
+reloadable = false
+
+[libraries]
+ios.debug = "res://addons/meta_sdk/bin/ios/meta_sdk.ios.template_debug.xcframework"
+ios.release = "res://addons/meta_sdk/bin/ios/meta_sdk.ios.template_release.xcframework"
+macos = "res://addons/meta_sdk/bin/macos/libmeta_sdk_stub.macos.dylib"
+windows.x86_64 = "res://addons/meta_sdk/bin/windows/meta_sdk_stub.windows.x86_64.dll"
+linux.x86_64 = "res://addons/meta_sdk/bin/linux/libmeta_sdk_stub.linux.x86_64.so"
+android.arm64 = "res://addons/meta_sdk/bin/android/libmeta_sdk_stub.android.arm64.so"
+android.arm32 = "res://addons/meta_sdk/bin/android/libmeta_sdk_stub.android.arm32.so"
+android.x86_64 = "res://addons/meta_sdk/bin/android/libmeta_sdk_stub.android.x86_64.so"
+
+[dependencies]
+ios.debug = { "res://addons/meta_sdk/bin/ios/FBSDKCoreKit.xcframework": "", "res://addons/meta_sdk/bin/ios/FBSDKCoreKit_Basics.xcframework": "", "res://addons/meta_sdk/bin/ios/FBAEMKit.xcframework": "" }
+ios.release = { "res://addons/meta_sdk/bin/ios/FBSDKCoreKit.xcframework": "", "res://addons/meta_sdk/bin/ios/FBSDKCoreKit_Basics.xcframework": "", "res://addons/meta_sdk/bin/ios/FBAEMKit.xcframework": "" }
