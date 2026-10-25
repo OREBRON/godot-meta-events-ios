@@ -12,3 +12,7 @@ config_version=5
 
 config/name="Meta SDK Dev"
 config/features=PackedStringArray("4.7")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/meta_sdk/plugin.cfg")
