@@ -11,8 +11,21 @@ config_version=5
 [application]
 
 config/name="Meta SDK Dev"
+run/main_scene="res://demo/demo.tscn"
 config/features=PackedStringArray("4.7")
+config/icon="res://demo/icon.png"
 
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/meta_sdk/plugin.cfg")
+
+[meta_sdk]
+
+app_id="1234567890"
+client_token="00000000000000000000000000000000"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
