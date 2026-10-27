@@ -213,10 +213,11 @@ never sends events for a real app.
 
 ## Release
 
-1. Set `version` in `addons/meta_sdk/plugin.cfg` (and update its description if the
-   bundled Meta SDK version changed). It must be one to three dot-separated
-   integers, such as `1.0.1`: `tools/build_ios.sh` writes it into the iOS
-   frameworks' `CFBundleShortVersionString`.
+1. Set `version` in `addons/meta_sdk/plugin.cfg` to the bundled Meta SDK version,
+   such as `19.0.0` (and update its description if that version changed): the
+   addon's version follows Meta's. It must be one to three dot-separated integers:
+   `tools/build_ios.sh` writes it into the iOS frameworks'
+   `CFBundleShortVersionString`.
 2. Run `tools/release.sh`. It reads the version, runs `tools/build_stubs.sh` and
    `tools/build_ios.sh`, imports the project, runs `tools/run_tests.sh`, copies
    `addons/meta_sdk` (without `.DS_Store`) and zips it with `zip -y`, which keeps
@@ -266,5 +267,5 @@ addons/meta_sdk/
 4. Run `tools/build_ios.sh`, then `tools/run_simulator_demo.sh`, which checks that
    `build/ios/console.log` contains `MetaSDK: started` and
    `MetaSDK: logged meta_sdk_demo`.
-5. Bump `version` (and the SDK version in the `plugin.cfg` description and this
-   README) and run `tools/release.sh`.
+5. Set `version` to the new Meta SDK version (and the SDK version in the
+   `plugin.cfg` description and this README) and run `tools/release.sh`.
