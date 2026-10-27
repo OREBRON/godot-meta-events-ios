@@ -1,21 +1,21 @@
 #!/bin/bash
-# Downloads Meta's iOS SDK v18.1.1 dynamic XCFrameworks (FBSDKCoreKit,
+# Downloads Meta's iOS SDK v19.0.0 dynamic XCFrameworks (FBSDKCoreKit,
 # FBSDKCoreKit_Basics, FBAEMKit) into vendor/, checks each zip's SHA-256 and
 # copies the unmodified, Meta-signed xcframeworks into addons/meta_sdk/bin/ios/.
 # A zip is downloaded only when it is missing or its checksum differs.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-VERSION="18.1.1"
+VERSION="19.0.0"
 VENDOR="vendor/meta-sdk-$VERSION"
 BIN="addons/meta_sdk/bin/ios"
 BASE_URL="https://github.com/facebook/facebook-ios-sdk/releases/download/v$VERSION"
 
 # <Name>:<sha256 of <Name>-Dynamic_XCFramework.zip>
 FRAMEWORKS=(
-	"FBSDKCoreKit:1577edd62ec0c172928befed3b309dc59ae8915d2aaad091460d9d1be5ddc13d"
-	"FBSDKCoreKit_Basics:c780833f204f9ec6eab70a3758a45c5c78bfb6f4e590289ccf395497f204cac1"
-	"FBAEMKit:ceaf685683c6a23ae4893150d0d770aeeaec34811ac8c146b3aa351beade5fa0"
+	"FBSDKCoreKit:791756b0786b79909de375d7060304d7822edac738218863f07470b1acfcde76"
+	"FBSDKCoreKit_Basics:7cdfe6a706a4852854aac2dcb24b4aa48ad231f1a3655605ea2333b6d0e2b305"
+	"FBAEMKit:df494f1e8130d975a0dfbfd54d1471c63d86767589bf03b98f6631ad87feb2ad"
 )
 
 fail() { echo "fetch_meta_sdk: $*" >&2; exit 1; }

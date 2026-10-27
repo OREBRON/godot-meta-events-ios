@@ -1,6 +1,6 @@
 # godot-meta-sdk
 
-A Godot 4.7 addon that wraps Meta's iOS SDK (FBSDKCoreKit 18.1.1) so a game can
+A Godot 4.7 addon that wraps Meta's iOS SDK (FBSDKCoreKit 19.0.0) so a game can
 log Meta App Events. It exists to measure iOS installs of Meta (Facebook and
 Instagram) ad campaigns through SKAdNetwork and AEM, which needs the SDK inside
 the app.
@@ -8,6 +8,8 @@ the app.
 - Games use the release zip, `dist/godot-meta-sdk-<version>.zip`, not this source.
 - One GDScript call: `MetaSDK.log_event(name, params)`.
 - iOS only. On every other platform the call does nothing.
+- iOS 15.0 or later: Meta's frameworks need it. That is Godot 4.7's default
+  `application/min_ios_version`; do not lower it in the iOS export preset.
 - The native library is a GDExtension built against godot-cpp 4.5
   (`compatibility_minimum = "4.5"`), so Godot 4.7.x updates need no rebuild.
 
@@ -15,7 +17,7 @@ the app.
 
 1. Unzip the release at the game's project root so that `addons/meta_sdk/` appears.
    Extract with a tool that restores symlinks, such as `unzip` or
-   `ditto -xk godot-meta-sdk-1.0.0.zip .` on macOS. Meta's xcframeworks hold symlinks
+   `ditto -xk godot-meta-sdk-<version>.zip .` on macOS. Meta's xcframeworks hold symlinks
    (their Mac Catalyst slices are versioned bundles) and are signed by Meta. A
    symlink-flattening install, such as repacking with plain `zip -r` or some
    asset-store installs, breaks those signatures and Xcode then refuses to build
@@ -84,7 +86,7 @@ What the export does, and what it does when something is missing:
 - `addons/meta_sdk/bin/ios/` holds a `.gdignore`, so Godot neither imports that
   folder nor packs it into game data on any platform. Without it, every export
   with "Export all resources" would pack the 26 Swift `*.abi.json` files inside
-  Meta's xcframeworks (about 53 MB). iOS exports still embed the xcframeworks,
+  Meta's xcframeworks (about 54 MB). iOS exports still embed the xcframeworks,
   because `meta_sdk.gdextension` names them by path. Keep the file when you copy
   or commit the addon; the editor warns at startup when it is missing.
 - An Xcode project export also gets a `.gdignore` in
@@ -138,7 +140,7 @@ The SDK starts at app launch and logs installs and app activation on its own
 ## App Store privacy
 
 Meta's frameworks bring their own privacy manifests (`PrivacyInfo.xcprivacy`),
-which Xcode merges into the app's privacy report. FBSDKCoreKit 18.1.1 declares
+which Xcode merges into the app's privacy report. FBSDKCoreKit 19.0.0 declares
 `NSPrivacyTracking = true` with the tracking domain `ep1.facebook.com`, and lists
 the Device ID as collected, linked to the user and used for tracking (third-party
 advertising, analytics, app functionality). Every game that adds this addon must
@@ -147,6 +149,12 @@ match. Apple blocks requests to a declared tracking domain until the player allo
 tracking through App Tracking Transparency, which this addon never asks for (see
 below).
 
+Since 12 October 2026, Meta's SDK 19.0.0 also attaches the screen title and the
+AppLink URL to every logged event. Meta's switches for this are
+`FBSDKAutoLogMetaDataEnabled = false` in the Info.plist or "Automatically include
+more app event details" in Events Manager; the addon writes no such key, so the
+Events Manager setting decides.
+
 ## What it does not do
 
 - **Android.** Android builds load empty stub libraries and get no `MetaSDK`
@@ -154,6 +162,11 @@ below).
   plugin (an AAR) could be added later behind the same GDScript API.
 - **ATT.** There is no App Tracking Transparency prompt and no
   `NSUserTrackingUsageDescription`. Meta measures through SKAdNetwork and AEM.
+- **Advertiser Tracking Enabled.** It never sets `Settings.isAdvertiserTrackingEnabled`
+  (Meta's old iOS 14 advice). On iOS 17 and later Meta's SDK ignores that setter and
+  reads the ATT status itself, and setting it to true on iOS 15 or 16 without the
+  player's ATT consent would break Apple's rules. Without ATT, events go to Meta
+  without tracking consent; it only changes once the game adds an ATT prompt.
 - **Deep links.** It writes no `fb{AppID}` URL scheme (`CFBundleURLTypes`), no
   `LSApplicationQueriesSchemes` and forwards no `openURL`, so re-engagement ad deep
   links do not work.
@@ -186,7 +199,7 @@ Tools:
 | Command | What it does |
 |---|---|
 | `tools/build_stubs.sh` | Builds the no-op libraries for macOS, Windows, Linux and Android and checks each exports `meta_sdk_library_init`. |
-| `tools/build_ios.sh` | Fetches Meta SDK 18.1.1 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs (with a secure timestamp) `meta_sdk.ios.template_{debug,release}.xcframework` with the `plugin.cfg` version as `CFBundleShortVersionString`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/` and writes that folder's `.gdignore`. A cold build takes several minutes. |
+| `tools/build_ios.sh` | Fetches Meta SDK 19.0.0 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs (with a secure timestamp) `meta_sdk.ios.template_{debug,release}.xcframework` with the `plugin.cfg` version as `CFBundleShortVersionString`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/` and writes that folder's `.gdignore`. A cold build takes several minutes. |
 | `tools/run_tests.sh` | Runs the headless GDScript tests in `tests/`. |
 | `tools/run_simulator_demo.sh` | Exports `demo/`, builds it for the iOS Simulator, runs it for 20 s, keeps the logs in `build/ios/` and fails unless the console shows `MetaSDK: started` and `MetaSDK: logged meta_sdk_demo`. |
 
@@ -240,9 +253,13 @@ addons/meta_sdk/
    `FRAMEWORKS`. Download each `<Name>-Dynamic_XCFramework.zip` from the
    `facebook-ios-sdk` release (`FBSDKCoreKit`, `FBSDKCoreKit_Basics`, `FBAEMKit`) and
    take its checksum with `shasum -a 256`. Use the dynamic zips only; the
-   xcframeworks stay unmodified and unsliced.
+   xcframeworks stay unmodified and unsliced. GitHub also lists each asset's
+   SHA-256 (`gh api repos/facebook/facebook-ios-sdk/releases/tags/v<version> -q
+   '.assets[] | .name + " " + .digest'`); the two must match.
 2. A new major version can change the API that `src/ios/meta_sdk_ios.mm` calls;
-   read Meta's release notes and fix the build.
+   read Meta's release notes and fix the build. Also check that Meta's
+   `MinimumOSVersion` (in each framework's `Info.plist`) is not above `MIN_IOS` in
+   `tools/build_ios.sh`; 19.0.0 needs iOS 15.0.
 3. Delete `build/ios` (`rm -rf build/ios`). It holds the SCons objects, and SCons
    does not track Meta's headers or binaries, so without this the build would keep
    objects compiled against the old SDK.
