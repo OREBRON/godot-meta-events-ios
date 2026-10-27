@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds everything, runs the tests and packs addons/meta_sdk into
-#   dist/godot-meta-sdk-<version>.zip
+#   dist/godot-meta-events-ios-<version>.zip
 # where <version> comes from addons/meta_sdk/plugin.cfg. The zip's root is
 # addons/meta_sdk/, ready to unzip at a game's project root.
 #
@@ -25,8 +25,8 @@ fail() { echo "release: $*" >&2; exit 1; }
 
 VERSION="$(sed -n 's/^version="\([^"]*\)".*/\1/p' "$ADDON/plugin.cfg")"
 [ -n "$VERSION" ] || fail "no version=\"...\" line in $ADDON/plugin.cfg"
-RELEASE_ZIP="$ROOT/dist/godot-meta-sdk-$VERSION.zip"
-ZIP="$ROOT/build/release/godot-meta-sdk-$VERSION.zip"
+RELEASE_ZIP="$ROOT/dist/godot-meta-events-ios-$VERSION.zip"
+ZIP="$ROOT/build/release/godot-meta-events-ios-$VERSION.zip"
 echo "release: version $VERSION"
 
 # A failure anywhere below must not leave an earlier release (or a rejected

@@ -1,11 +1,11 @@
-# godot-meta-sdk
+# godot-meta-events-ios
 
 A Godot 4.7 addon that wraps Meta's iOS SDK (FBSDKCoreKit 19.0.0) so a game can
 log Meta App Events. It exists to measure iOS installs of Meta (Facebook and
 Instagram) ad campaigns through SKAdNetwork and AEM, which needs the SDK inside
 the app.
 
-- Games use the release zip, `dist/godot-meta-sdk-<version>.zip`, not this source.
+- Games use the release zip, `dist/godot-meta-events-ios-<version>.zip`, not this source.
 - One GDScript call: `MetaSDK.log_event(name, params)`.
 - iOS only. On every other platform the call does nothing.
 - iOS 15.0 or later: Meta's frameworks need it. That is Godot 4.7's default
@@ -17,7 +17,7 @@ the app.
 
 1. Unzip the release at the game's project root so that `addons/meta_sdk/` appears.
    Extract with a tool that restores symlinks, such as `unzip` or
-   `ditto -xk godot-meta-sdk-<version>.zip .` on macOS. Meta's xcframeworks hold symlinks
+   `ditto -xk godot-meta-events-ios-<version>.zip .` on macOS. Meta's xcframeworks hold symlinks
    (their Mac Catalyst slices are versioned bundles) and are signed by Meta. A
    symlink-flattening install, such as repacking with plain `zip -r` or some
    asset-store installs, breaks those signatures and Xcode then refuses to build
@@ -102,7 +102,7 @@ Delete the old addon before unzipping the new release, then check the install:
 
 ```sh
 rm -rf addons/meta_sdk
-unzip -q godot-meta-sdk-<version>.zip -d .
+unzip -q godot-meta-events-ios-<version>.zip -d .
 codesign --verify --strict addons/meta_sdk/bin/ios/FBSDKCoreKit.xcframework
 ```
 
@@ -227,7 +227,7 @@ never sends events for a real app.
    xcframeworks, `bin/ios/.gdignore` and all six stub libraries), nothing from
    `.godot/`, `vendor/` or `build/`, the same number of symlinks as the source,
    and unzipped xcframeworks that pass `codesign --verify --strict`.
-4. The result is `dist/godot-meta-sdk-<version>.zip`. `dist/` is not committed.
+4. The result is `dist/godot-meta-events-ios-<version>.zip`. `dist/` is not committed.
    Meta's three xcframeworks must stay unmodified, so the zip is large (about 135
    MB of Meta frameworks, mostly Mac Catalyst slices and debug symbols).
 
