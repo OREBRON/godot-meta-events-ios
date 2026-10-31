@@ -8,7 +8,10 @@ through SKAdNetwork and AEM, which needs the SDK inside the app.
 - Games use the release zip, `dist/godot-meta-events-ios-<version>.zip`, not this source.
 - GDScript calls: `MetaSDK.log_event(name, params)` and
   `MetaSDK.request_tracking_authorization(callback)`.
-- iOS only. On every other platform the calls do nothing.
+- iOS only. On macOS, Windows and Linux (x86_64) and Android (arm64, arm32,
+  x86_64) the addon loads an empty stub library and the calls do nothing. Other
+  targets, such as Web, have no library: Godot prints an error that it is
+  missing, and the calls still do nothing.
 - iOS 15.0 or later: Meta's frameworks need it. That is Godot 4.7's default
   `application/min_ios_version`; do not lower it in the iOS export preset.
 - The native library is a GDExtension built against godot-cpp 4.5
@@ -95,7 +98,8 @@ What the export does, and what it does when something is missing:
   the export folder is inside the project (such as `build/ios/`), this keeps the
   next export from packing those copies' `*.abi.json` files.
 - A PCK/ZIP export of the iOS preset (`--export-pack`) writes no Xcode project,
-  so the framework repair is skipped and prints nothing.
+  so the framework repair is skipped and prints nothing, even when an earlier
+  Xcode project export of the same name sits beside it.
 
 ## Upgrade
 

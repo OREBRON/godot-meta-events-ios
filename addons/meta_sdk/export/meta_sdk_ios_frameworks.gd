@@ -31,15 +31,28 @@ static func project_file(export_path: String) -> String:
 	return (_export_base(export_path) + ".xcodeproj").path_join("project.pbxproj")
 
 
+## The modification time of the project.pbxproj an iOS export to export_path
+## writes, or 0 when there is none. Recorded when an export begins, so its end can
+## tell whether it wrote the project; whole seconds are enough, as an export takes
+## several.
+static func project_time(export_path: String) -> int:
+	var path := project_file(export_path)
+	return FileAccess.get_modified_time(path) if FileAccess.file_exists(path) else 0
+
+
 ## Restores the Meta frameworks of an iOS export to export_path, but only when that
-## export wrote an Xcode project. A PCK/ZIP export (--export-pack) runs the same
-## export plugins yet writes no project and copies no frameworks, so there is
-## nothing to restore and nothing to report. Returns one message per failure.
+## export wrote an Xcode project: project.pbxproj exists and its project_time is no
+## longer project_time_before, the one recorded when the export began (0: no
+## project then). A PCK/ZIP export (--export-pack) runs the same export plugins yet
+## writes no project and copies no frameworks, so there is nothing to restore and
+## nothing to report, even beside an earlier Xcode project export of the same name.
+## Returns one message per failure.
 ##
 ## The exported folder then gets a .gdignore (GDIGNORE_TEXT), like the addon's own
 ## bin/ios, for exports into a folder inside the project such as build/ios.
-static func restore_export(export_path: String, source_dir: String = SOURCE_DIR) -> PackedStringArray:
-	if not FileAccess.file_exists(project_file(export_path)):
+static func restore_export(export_path: String, project_time_before: int = 0, source_dir: String = SOURCE_DIR) -> PackedStringArray:
+	var written := project_time(export_path)
+	if written == 0 or written == project_time_before:
 		return PackedStringArray()
 	var target_dir := exported_dir(export_path)
 	var errors := restore(target_dir, source_dir)
@@ -98,8 +111,12 @@ static func copy_tree(from: String, to: String) -> Error:
 	return err
 
 
-## Deletes a folder tree without following symlinks out of it.
+## Deletes a folder tree without following symlinks out of it. A symlinked root
+## is only unlinked: opening it would empty the folder it points at.
 static func remove_tree(path: String) -> Error:
+	var parent := DirAccess.open(path.get_base_dir())
+	if parent != null and parent.is_link(path.get_file()):
+		return parent.remove(path.get_file())
 	var dir := DirAccess.open(path)
 	if dir == null:
 		return DirAccess.get_open_error()

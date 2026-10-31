@@ -77,27 +77,46 @@ func run() -> void:
 	errors = Frameworks.restore(exported, source)
 	check(errors.size() == 1 and errors[0].contains("FBAEMKit.xcframework"), "A framework Godot did not export is reported: %s" % ", ".join(errors))
 
+	# A symlinked xcframework in the export is unlinked, never emptied: this one points at the original.
+	var linked := root.path_join("linked")
+	DirAccess.make_dir_recursive_absolute(linked)
+	DirAccess.open(linked).create_link(source.path_join("FBSDKCoreKit.xcframework"), linked.path_join("FBSDKCoreKit.xcframework"))
+	for name in ["FBSDKCoreKit_Basics", "FBAEMKit"]:
+		make_godot_copy(linked.path_join(name + ".xcframework"))
+	errors = Frameworks.restore(linked, source)
+	check(errors.is_empty(), "Restore over a symlinked xcframework reports no errors: %s" % ", ".join(errors))
+	check(FileAccess.get_file_as_string(source.path_join("FBSDKCoreKit.xcframework/maccatalyst/Kit.framework/Versions/A/Kit")) == "binary", "A symlinked xcframework leaves the original it points at intact")
+	check(link_target(linked.path_join("FBSDKCoreKit.xcframework")) == "<not a link>", "A symlinked xcframework is replaced by a real folder")
+	check(link_target(linked.path_join("FBSDKCoreKit.xcframework/maccatalyst/Kit.framework/Versions/Current")) == "A", "A symlinked xcframework is replaced by the exact copy")
+
 	check(Frameworks.project_file("build/ios/MetaSDKDemo.xcodeproj") == project.path_join("build/ios/MetaSDKDemo.xcodeproj/project.pbxproj"), "Relative export paths name the project file inside the project")
 	check(Frameworks.project_file("/Users/dev/out/Color Sprint.zip") == "/Users/dev/out/Color Sprint.xcodeproj/project.pbxproj", "Any export path names the Xcode project next to it")
 
 	# --export-pack runs the same plugins but writes only a PCK/ZIP: no project, no frameworks.
 	var pack_export := root.path_join("pack/Game.zip")
-	errors = Frameworks.restore_export(pack_export, source)
+	errors = Frameworks.restore_export(pack_export, 0, source)
 	check(errors.is_empty(), "An export without an Xcode project reports nothing: %s" % ", ".join(errors))
 	var stray_copy := root.path_join("pack/Game/dylibs/addons/meta_sdk/bin/ios")
 	for name in Frameworks.NAMES:
 		make_godot_copy(stray_copy.path_join(name + ".xcframework"))
-	errors = Frameworks.restore_export(pack_export, source)
+	errors = Frameworks.restore_export(pack_export, 0, source)
 	check(errors.is_empty(), "An export without an Xcode project still reports nothing: %s" % ", ".join(errors))
 	check(link_target(stray_copy.path_join("FBSDKCoreKit.xcframework/maccatalyst/Kit.framework/Versions/Current")) == "<not a link>", "An export without an Xcode project leaves files alone")
 	check(not FileAccess.file_exists(stray_copy.path_join(".gdignore")), "An export without an Xcode project writes no .gdignore")
+	# An earlier Xcode project export of the same name is not this export's to repair.
+	write_file(Frameworks.project_file(pack_export), "pbxproj")
+	check(Frameworks.project_time(pack_export) > 0, "project_time reads an existing project.pbxproj")
+	errors = Frameworks.restore_export(pack_export, Frameworks.project_time(pack_export), source)
+	check(errors.is_empty(), "A pack export beside an earlier Xcode project reports nothing: %s" % ", ".join(errors))
+	check(link_target(stray_copy.path_join("FBSDKCoreKit.xcframework/maccatalyst/Kit.framework/Versions/Current")) == "<not a link>", "A pack export leaves an earlier Xcode project's frameworks alone")
+	check(not FileAccess.file_exists(stray_copy.path_join(".gdignore")), "A pack export writes no .gdignore into an earlier Xcode project")
 
 	var project_export := root.path_join("project/Game.xcodeproj")
 	write_file(project_export.path_join("project.pbxproj"), "pbxproj")
 	var project_copy := Frameworks.exported_dir(project_export)
 	for name in Frameworks.NAMES:
 		make_godot_copy(project_copy.path_join(name + ".xcframework"))
-	errors = Frameworks.restore_export(project_export, source)
+	errors = Frameworks.restore_export(project_export, 0, source)
 	check(errors.is_empty(), "An Xcode project export restores without errors: %s" % ", ".join(errors))
 	for name in Frameworks.NAMES:
 		check(link_target(project_copy.path_join(name + ".xcframework/maccatalyst/Kit.framework/Versions/Current")) == "A", "%s: an Xcode project export gets the exact copy" % name)
@@ -107,8 +126,9 @@ func run() -> void:
 		check(not FileAccess.file_exists(project_copy.path_join(name + ".xcframework/.gdignore")), "%s: nothing is written inside Meta's xcframework" % name)
 		check(not FileAccess.file_exists(source.path_join(name + ".xcframework/.gdignore")), "%s: the original gets no .gdignore" % name)
 	Frameworks.remove_tree(project_copy.path_join("FBAEMKit.xcframework"))
-	errors = Frameworks.restore_export(project_export, source)
-	check(errors.size() == 1 and errors[0].contains("FBAEMKit.xcframework"), "An Xcode project export still reports a missing framework: %s" % ", ".join(errors))
+	# A re-export rewrites the project: its time moves on from the one recorded at the start.
+	errors = Frameworks.restore_export(project_export, Frameworks.project_time(project_export) - 1, source)
+	check(errors.size() == 1 and errors[0].contains("FBAEMKit.xcframework"), "A re-export that rewrote the Xcode project still reports a missing framework: %s" % ", ".join(errors))
 	check(FileAccess.get_file_as_string(project_copy.path_join(".gdignore")) == Frameworks.GDIGNORE_TEXT, "A re-export with a missing framework still keeps the .gdignore")
 
 	check(Frameworks.remove_tree(root) == OK and not DirAccess.dir_exists_absolute(root), "remove_tree deletes a tree with symlinks")

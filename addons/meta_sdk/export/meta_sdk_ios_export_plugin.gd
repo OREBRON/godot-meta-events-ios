@@ -10,6 +10,8 @@ const Frameworks = preload("meta_sdk_ios_frameworks.gd")
 
 ## The path of the iOS export in progress; empty for other exports.
 var _ios_export_path := ""
+## Frameworks.project_time of that export when it began.
+var _ios_project_time := 0
 
 
 func _get_name() -> String:
@@ -42,6 +44,7 @@ func _export_begin(features: PackedStringArray, _is_debug: bool, path: String, _
 	if not features.has("ios"):
 		return
 	_ios_export_path = path
+	_ios_project_time = Frameworks.project_time(path)
 	var add_skadnetwork: bool = get_option(Plist.SKADNETWORK_OPTION)
 	var result := _build_plist(add_skadnetwork)
 	if result.error != OK:
@@ -53,11 +56,12 @@ func _export_begin(features: PackedStringArray, _is_debug: bool, path: String, _
 ## Godot calls this once the Xcode project is written. A one-click export
 ## (application/export_project_only off) runs xcodebuild before that, so only
 ## project-only exports reach Xcode with the exact frameworks. A PCK/ZIP export
-## (--export-pack) writes no Xcode project, so restore_export does nothing then.
+## (--export-pack) writes no Xcode project, so restore_export does nothing then,
+## even when an earlier Xcode project export of the same name sits beside it.
 func _export_end() -> void:
 	if _ios_export_path.is_empty():
 		return
-	for message in Frameworks.restore_export(_ios_export_path):
+	for message in Frameworks.restore_export(_ios_export_path, _ios_project_time):
 		push_error("Meta SDK iOS export error: " + message)
 	_ios_export_path = ""
 
