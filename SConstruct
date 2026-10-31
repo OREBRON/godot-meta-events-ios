@@ -58,6 +58,7 @@ env.Append(
         "-framework", "FBSDKCoreKit",
         "-framework", "FBSDKCoreKit_Basics",
         "-framework", "FBAEMKit",
+        "-framework", "AppTrackingTransparency",
         "-framework", "UIKit",
         "-framework", "Foundation",
         "-install_name", "@rpath/{0}.framework/{0}".format(name),

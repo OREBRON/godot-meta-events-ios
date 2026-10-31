@@ -8,6 +8,11 @@ extends RefCounted
 ## Name of the native Engine singleton registered by the iOS GDExtension.
 const NATIVE_SINGLETON := "MetaSDKIOS"
 
+## The player's App Tracking Transparency answer: the values of Apple's
+## ATTrackingManager.AuthorizationStatus, plus UNAVAILABLE where the native
+## singleton is missing (desktop, editor, Android).
+enum TrackingStatus { UNAVAILABLE = -1, NOT_DETERMINED = 0, RESTRICTED = 1, DENIED = 2, AUTHORIZED = 3 }
+
 
 ## Logs an app event to Meta. Does nothing when the native singleton is missing
 ## (desktop, editor). Parameter pairs Meta cannot take are dropped with a warning
@@ -23,6 +28,28 @@ static func log_event(name: String, params: Dictionary = {}) -> void:
 		return
 	var native := Engine.get_singleton(NATIVE_SINGLETON)
 	native.log_event(name, clean)
+
+
+## The player's current answer to Apple's tracking prompt. Never shows the prompt.
+static func get_tracking_authorization_status() -> TrackingStatus:
+	if not Engine.has_singleton(NATIVE_SINGLETON):
+		return TrackingStatus.UNAVAILABLE
+	return Engine.get_singleton(NATIVE_SINGLETON).get_tracking_authorization_status() as TrackingStatus
+
+
+## Shows Apple's App Tracking Transparency prompt if the player has not answered
+## it yet, then calls `callback` with the TrackingStatus, always deferred. iOS asks
+## once per install; later calls report the stored answer without a prompt. The
+## prompt waits until the app is active. The Info.plist needs
+## NSUserTrackingUsageDescription: without it the call prints an error, shows
+## nothing and reports the current status (NOT_DETERMINED unless the player
+## answered in an earlier build). Where the native singleton is missing the
+## callback gets UNAVAILABLE.
+static func request_tracking_authorization(callback: Callable) -> void:
+	if not Engine.has_singleton(NATIVE_SINGLETON):
+		callback.call_deferred(TrackingStatus.UNAVAILABLE)
+		return
+	Engine.get_singleton(NATIVE_SINGLETON).request_tracking_authorization(callback)
 
 
 static func _sanitize(event_name: String, params: Dictionary) -> Dictionary:

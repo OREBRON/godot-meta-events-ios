@@ -1,13 +1,14 @@
 # godot-meta-events-ios
 
 A Godot 4.7 addon that wraps Meta's iOS SDK (FBSDKCoreKit 19.0.0) so a game can
-log Meta App Events. It exists to measure iOS installs of Meta (Facebook and
-Instagram) ad campaigns through SKAdNetwork and AEM, which needs the SDK inside
-the app.
+log Meta App Events and ask for App Tracking Transparency (ATT) permission. It
+exists to measure iOS installs of Meta (Facebook and Instagram) ad campaigns
+through SKAdNetwork and AEM, which needs the SDK inside the app.
 
 - Games use the release zip, `dist/godot-meta-events-ios-<version>.zip`, not this source.
-- One GDScript call: `MetaSDK.log_event(name, params)`.
-- iOS only. On every other platform the call does nothing.
+- GDScript calls: `MetaSDK.log_event(name, params)` and
+  `MetaSDK.request_tracking_authorization(callback)`.
+- iOS only. On every other platform the calls do nothing.
 - iOS 15.0 or later: Meta's frameworks need it. That is Godot 4.7's default
   `application/min_ios_version`; do not lower it in the iOS export preset.
 - The native library is a GDExtension built against godot-cpp 4.5
@@ -137,6 +138,45 @@ MetaSDK.log_event("level_cleared", {"level": 3, "time": 41.5, "perfect": true, "
 The SDK starts at app launch and logs installs and app activation on its own
 (`fb_mobile_activate_app`); it batches events and sends them in the background.
 
+### Tracking permission (ATT)
+
+```gdscript
+MetaSDK.request_tracking_authorization(func(_status: int) -> void: start_ads())
+```
+
+`MetaSDK.request_tracking_authorization(callback: Callable)` shows Apple's
+tracking prompt if the player has not answered it yet, then calls `callback`
+with a `MetaSDK.TrackingStatus`, always deferred:
+
+| Value | Meaning |
+|---|---|
+| `NOT_DETERMINED` (0) | Not asked yet, or the prompt could not be shown. |
+| `RESTRICTED` (1) | A device profile or Screen Time forbids tracking. |
+| `DENIED` (2) | The player tapped "Ask App Not to Track" or turned tracking off in Settings. |
+| `AUTHORIZED` (3) | The player allowed tracking. |
+| `UNAVAILABLE` (-1) | No native singleton: desktop, the editor, Android. |
+
+- iOS shows the prompt once per install. Later calls report the stored answer
+  at once; only the Settings app can change it.
+- The prompt only appears while the app is active. A request made during launch
+  waits for `UIApplicationDidBecomeActiveNotification` before asking.
+- The game's Info.plist must hold `NSUserTrackingUsageDescription`, the sentence
+  shown in the prompt. Add it through the iOS export preset's
+  `application/additional_plist_content`. Without it the call shows no prompt,
+  because iOS terminates an app that asks without one: it prints
+  `MetaSDK: NSUserTrackingUsageDescription is missing from Info.plist; tracking
+  prompt not shown.` and reports the current status, which is `NOT_DETERMINED`
+  unless the player answered in an earlier build that had the key.
+- It works whether or not Meta's SDK started (a missing App ID does not stop it).
+  Meta's SDK reads the answer itself; nothing else needs to be passed to Meta.
+- `MetaSDK.get_tracking_authorization_status()` returns the current answer and
+  never shows the prompt.
+- Ask before requesting ads, so ad SDKs such as AdMob can use the advertising
+  identifier when the player allows it. When the game also shows Google's UMP
+  consent message, ask after that message closes.
+- Debug builds print `MetaSDK: tracking authorization <status>` when the player
+  answers the prompt.
+
 ## App Store privacy
 
 Meta's frameworks bring their own privacy manifests (`PrivacyInfo.xcprivacy`),
@@ -146,8 +186,9 @@ the Device ID as collected, linked to the user and used for tracking (third-part
 advertising, analytics, app functionality). Every game that adds this addon must
 revisit its App Privacy answers in App Store Connect and its privacy policy to
 match. Apple blocks requests to a declared tracking domain until the player allows
-tracking through App Tracking Transparency, which this addon never asks for (see
-below).
+tracking through App Tracking Transparency. A game whose App Privacy answers say
+data is used for tracking must call `MetaSDK.request_tracking_authorization`
+before it tracks (App Review Guideline 5.1.2).
 
 Since 12 October 2026, Meta's SDK 19.0.0 also attaches the screen title and the
 AppLink URL to every logged event. Meta's switches for this are
@@ -160,13 +201,14 @@ Events Manager setting decides.
 - **Android.** Android builds load empty stub libraries and get no `MetaSDK`
   behaviour. Android installs have to be measured without the SDK; an Android
   plugin (an AAR) could be added later behind the same GDScript API.
-- **ATT.** There is no App Tracking Transparency prompt and no
-  `NSUserTrackingUsageDescription`. Meta measures through SKAdNetwork and AEM.
+- **ATT purpose string.** It asks for tracking only when the game calls
+  `request_tracking_authorization`, and writes no `NSUserTrackingUsageDescription`;
+  the game adds that key itself.
 - **Advertiser Tracking Enabled.** It never sets `Settings.isAdvertiserTrackingEnabled`
   (Meta's old iOS 14 advice). On iOS 17 and later Meta's SDK ignores that setter and
   reads the ATT status itself, and setting it to true on iOS 15 or 16 without the
-  player's ATT consent would break Apple's rules. Without ATT, events go to Meta
-  without tracking consent; it only changes once the game adds an ATT prompt.
+  player's ATT consent would break Apple's rules. Until the player allows tracking,
+  events go to Meta without tracking consent.
 - **Deep links.** It writes no `fb{AppID}` URL scheme (`CFBundleURLTypes`), no
   `LSApplicationQueriesSchemes` and forwards no `openURL`, so re-engagement ad deep
   links do not work.
@@ -201,7 +243,7 @@ Tools:
 | `tools/build_stubs.sh` | Builds the no-op libraries for macOS, Windows, Linux and Android and checks each exports `meta_sdk_library_init`. |
 | `tools/build_ios.sh` | Fetches Meta SDK 19.0.0 (`tools/fetch_meta_sdk.sh`, SHA-256 checked), builds and signs (with a secure timestamp) `meta_sdk.ios.template_{debug,release}.xcframework` with the `plugin.cfg` version as `CFBundleShortVersionString`, copies Meta's three xcframeworks into `addons/meta_sdk/bin/ios/` and writes that folder's `.gdignore`. A cold build takes several minutes. |
 | `tools/run_tests.sh` | Runs the headless GDScript tests in `tests/`. |
-| `tools/run_simulator_demo.sh` | Exports `demo/`, builds it for the iOS Simulator, runs it for 20 s, keeps the logs in `build/ios/` and fails unless the console shows `MetaSDK: started` and `MetaSDK: logged meta_sdk_demo`. |
+| `tools/run_simulator_demo.sh` | Exports `demo/`, builds it for the iOS Simulator, runs it for 20 s, keeps the logs in `build/ios/` and fails unless the console shows `MetaSDK: started` and `MetaSDK: logged meta_sdk_demo`. The demo then asks for tracking permission; the prompt stays up until someone taps it, and the answer prints as `MetaSDK demo: tracking status <n>`. |
 
 The Simulator demo needs workarounds that apply only to that script, not to games:
 Godot 4.7.2's official iOS template ships an x86_64-only Simulator `libgodot.a`

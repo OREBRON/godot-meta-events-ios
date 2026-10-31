@@ -5,6 +5,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
+#import <AppTrackingTransparency/AppTrackingTransparency.h>
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
@@ -33,6 +34,8 @@ static bool info_plist_has_string(NSString *p_key) {
 
 void MetaSDKIOS::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("log_event", "name", "params"), &MetaSDKIOS::log_event);
+	ClassDB::bind_method(D_METHOD("get_tracking_authorization_status"), &MetaSDKIOS::get_tracking_authorization_status);
+	ClassDB::bind_method(D_METHOD("request_tracking_authorization", "callback"), &MetaSDKIOS::request_tracking_authorization);
 }
 
 void MetaSDKIOS::start() {
@@ -109,4 +112,56 @@ void MetaSDKIOS::log_event(const String &p_name, const Dictionary &p_params) {
 #ifdef DEBUG_ENABLED
 	UtilityFunctions::print("MetaSDK: logged ", p_name);
 #endif
+}
+
+int64_t MetaSDKIOS::get_tracking_authorization_status() const {
+	return (int64_t)ATTrackingManager.trackingAuthorizationStatus;
+}
+
+void MetaSDKIOS::request_tracking_authorization(const Callable &p_callback) {
+	// iOS terminates an app that asks for tracking without a purpose string.
+	if (!info_plist_has_string(@"NSUserTrackingUsageDescription")) {
+		ERR_PRINT("MetaSDK: NSUserTrackingUsageDescription is missing from Info.plist; tracking prompt not shown.");
+		p_callback.call_deferred(get_tracking_authorization_status());
+		return;
+	}
+	// iOS asks once per install; afterwards only Settings can change the answer.
+	if (ATTrackingManager.trackingAuthorizationStatus != ATTrackingManagerAuthorizationStatusNotDetermined) {
+		p_callback.call_deferred(get_tracking_authorization_status());
+		return;
+	}
+
+	const Callable callback = p_callback;
+	void (^request)(void) = ^{
+		[ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {
+			// The completion handler runs on a background queue.
+			dispatch_async(dispatch_get_main_queue(), ^{
+#ifdef DEBUG_ENABLED
+				UtilityFunctions::print("MetaSDK: tracking authorization ", (int64_t)status);
+#endif
+				callback.call_deferred((int64_t)status);
+			});
+		}];
+	};
+	// iOS shows the prompt only while the app is active; asked during launch or
+	// from the background it answers "not determined" without showing it.
+	void (^request_when_active)(void) = ^{
+		if (UIApplication.sharedApplication.applicationState == UIApplicationStateActive) {
+			request();
+			return;
+		}
+		__block id observer = [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification
+																			  object:nil
+																			   queue:NSOperationQueue.mainQueue
+																		  usingBlock:^(NSNotification *) {
+																			  [NSNotificationCenter.defaultCenter removeObserver:observer];
+																			  observer = nil;
+																			  request();
+																		  }];
+	};
+	if (NSThread.isMainThread) {
+		request_when_active();
+	} else {
+		dispatch_async(dispatch_get_main_queue(), request_when_active);
+	}
 }

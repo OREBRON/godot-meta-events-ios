@@ -2,8 +2,13 @@ extends SceneTree
 
 class FakeNative extends Object:
 	var calls: Array = []
+	var tracking_status := 3
 	func log_event(name: String, params: Dictionary) -> void:
 		calls.append([name, params])
+	func get_tracking_authorization_status() -> int:
+		return tracking_status
+	func request_tracking_authorization(callback: Callable) -> void:
+		callback.call_deferred(tracking_status)
 
 ## Collects every push_warning text, so the test can check which pairs were reported.
 class WarningLog extends Logger:
@@ -53,8 +58,23 @@ func run() -> void:
 	MetaSDK.log_event("no_native_clean", {"a": 1})
 	check(log.take().is_empty(), "A clean event without the native singleton prints nothing")
 
+	check(MetaSDK.get_tracking_authorization_status() == MetaSDK.TrackingStatus.UNAVAILABLE,
+		"Without the native singleton the tracking status is UNAVAILABLE")
+	var answers: Array = []
+	MetaSDK.request_tracking_authorization(func(status: int) -> void: answers.append(status))
+	check(answers.is_empty(), "The tracking callback is deferred, never called inside the request")
+	await process_frame
+	check(answers == [MetaSDK.TrackingStatus.UNAVAILABLE], "Without the native singleton the tracking callback gets UNAVAILABLE: %s" % str(answers))
+
 	var fake := FakeNative.new()
 	Engine.register_singleton("MetaSDKIOS", fake)
+	check(MetaSDK.get_tracking_authorization_status() == MetaSDK.TrackingStatus.AUTHORIZED,
+		"The tracking status comes from the native singleton")
+	fake.tracking_status = MetaSDK.TrackingStatus.DENIED
+	answers.clear()
+	MetaSDK.request_tracking_authorization(func(status: int) -> void: answers.append(status))
+	await process_frame
+	check(answers == [MetaSDK.TrackingStatus.DENIED], "The tracking request goes to the native singleton: %s" % str(answers))
 	MetaSDK.log_event("fb_mobile_tutorial_completion", {"fb_success": 1})
 	check(fake.calls == [["fb_mobile_tutorial_completion", {"fb_success": 1}]], "Name and params reach the native singleton unchanged")
 	check(log.take().is_empty(), "Supported params print no warning")
